@@ -7,7 +7,7 @@ import click
 from dotenv import find_dotenv, load_dotenv
 
 
-def divide_string(rules_text: str, parts: int = 3) -> List[str]:
+def divide_string(rules_text: str, parts: int) -> List[str]:
     # Determine the length of each substring
     part_length = len(rules_text) // parts
 
@@ -48,7 +48,7 @@ def main(input_filepath, output_filepath):
     with open("./data/raw/magic-the-gathering-comprehensive-rules.txt", "r") as f:
         rules_text = f.readlines()
 
-    rules_text_divided = divide_string(rules_text=rules_text, parts=3)
+    rules_text_divided = divide_string(rules_text=rules_text, parts=5)
 
     # for each item in rules_text_divided, write it to a file
     for i, text in enumerate(rules_text_divided):
@@ -71,5 +71,25 @@ if __name__ == "__main__":
     # find .env automagically by walking up directories until it's found, then
     # load up the .env entries as environment variables
     load_dotenv(find_dotenv())
+
+    # unzip data/raw/AllPrintingsCSVFiles.zip
+    path = "data/raw/AllPrintingsCSVFiles.zip"
+
+    import zipfile
+
+    with zipfile.ZipFile(path, "r") as zip_ref:
+        zip_ref.extractall("data/raw/AllPrintingsCSVFiles")
+
+    import polars as pl
+
+    cards = pl.read_csv(
+        "data/raw/AllPrintingsCSVFiles/cards.csv", columns=["name", "text", "setCode"]
+    )
+
+    # Filter out cards where sert code is not "BRO"
+    cards = cards.filter(pl.col("setCode") == "BRO")
+
+    # write cards to processed
+    cards.write_csv("data/processed/cards.csv")
 
     main()
