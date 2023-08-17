@@ -2,12 +2,13 @@
 import logging
 from pathlib import Path
 from typing import Dict, List, Tuple, Union
-
+import zipfile
 import click
 from dotenv import find_dotenv, load_dotenv
+import polars as pl
 
 
-def divide_string(rules_text: str, parts: int) -> List[str]:
+def divide_rules_into_parts(rules_text: str, parts: int) -> List[str]:
     # Determine the length of each substring
     part_length = len(rules_text) // parts
 
@@ -35,6 +36,15 @@ def divide_string(rules_text: str, parts: int) -> List[str]:
     return substrings
 
 
+def process_cards_file(cards: pl.DataFrame, sets: List[str] = ["BRO"]) -> pl.DataFrame:
+    # Filter out cards where sert code is not "BRO"
+    cards = cards.filter(pl.col("setCode").is_in(sets))
+
+    cards = cards.unique()
+
+    return cards
+
+
 @click.command()
 @click.argument("input_filepath", type=click.Path(exists=True))
 @click.argument("output_filepath", type=click.Path())
@@ -48,7 +58,7 @@ def main(input_filepath, output_filepath):
     with open("./data/raw/magic-the-gathering-comprehensive-rules.txt", "r") as f:
         rules_text = f.readlines()
 
-    rules_text_divided = divide_string(rules_text=rules_text, parts=5)
+    rules_text_divided = divide_rules_into_parts(rules_text=rules_text, parts=5)
 
     # for each item in rules_text_divided, write it to a file
     for i, text in enumerate(rules_text_divided):
@@ -59,6 +69,28 @@ def main(input_filepath, output_filepath):
             "w",
         ) as f:
             f.write(text)
+
+    cards = process_cards_file(
+        cards=pl.read_csv(
+            "data/raw/AllPrintingsCSVFiles/cards.csv",
+            columns=[
+                "name",
+                "text",
+                "setCode",
+                "manaCost",
+                "colorIdentity",
+                "subtypes",
+                "supertypes",
+                "types",
+                "power",
+                "toughness",
+            ],
+            dtypes={"power": pl.Utf8, "toughness": pl.Utf8},
+        )
+    )
+
+    # write cards to processed
+    cards.write_csv("data/processed/cards.csv")
 
 
 if __name__ == "__main__":
@@ -71,25 +103,5 @@ if __name__ == "__main__":
     # find .env automagically by walking up directories until it's found, then
     # load up the .env entries as environment variables
     load_dotenv(find_dotenv())
-
-    # unzip data/raw/AllPrintingsCSVFiles.zip
-    path = "data/raw/AllPrintingsCSVFiles.zip"
-
-    import zipfile
-
-    with zipfile.ZipFile(path, "r") as zip_ref:
-        zip_ref.extractall("data/raw/AllPrintingsCSVFiles")
-
-    import polars as pl
-
-    cards = pl.read_csv(
-        "data/raw/AllPrintingsCSVFiles/cards.csv", columns=["name", "text", "setCode"]
-    )
-
-    # Filter out cards where sert code is not "BRO"
-    cards = cards.filter(pl.col("setCode") == "BRO")
-
-    # write cards to processed
-    cards.write_csv("data/processed/cards.csv")
 
     main()
